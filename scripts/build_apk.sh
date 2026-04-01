@@ -35,7 +35,23 @@ cp /src/android/app/src/main/AndroidManifest.xml android/app/src/main/AndroidMan
 printf 'flutter.sdk=/opt/flutter\nsdk.dir=/opt/android-sdk\n' > android/local.properties
 flutter pub get
 flutter build apk --${BUILD_TYPE}
-cp build/app/outputs/flutter-apk/app-${BUILD_TYPE}.apk /out/k8s-${BUILD_TYPE}.apk
+cp build/app/outputs/flutter-apk/app-${BUILD_TYPE}.apk /out/kubxr-${BUILD_TYPE}.apk
 "
 
-echo "✅ Build complete: ${OUTPUT_DIR}/k8s-${BUILD_TYPE}.apk"
+echo "✅ Build complete: ${OUTPUT_DIR}/kubxr-${BUILD_TYPE}.apk"
+
+if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+    echo "=== Pushing Artifact to Registry ==="
+    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+    
+    # Wrap APK in a minimal image for storage in registry
+    cat <<EOF > "${OUTPUT_DIR}/Dockerfile.artifact"
+FROM scratch
+COPY kubxr-${BUILD_TYPE}.apk /kubxr-${BUILD_TYPE}.apk
+EOF
+    
+    IMAGE_TAG="${DOCKER_USERNAME}/kubxr:${BUILD_TYPE}"
+    docker build -t "\$IMAGE_TAG" -f "${OUTPUT_DIR}/Dockerfile.artifact" "${OUTPUT_DIR}"
+    docker push "\$IMAGE_TAG"
+    echo "✅ Artifact pushed: \$IMAGE_TAG"
+fi
